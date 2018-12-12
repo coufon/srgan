@@ -45,6 +45,9 @@ def train():
 
     ## If your machine have enough memory, please pre-load the whole train set.
     train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=32)
+    total_train_imgs = len(train_hr_imgs)
+    # Batch size is fixed in this model.
+    train_hr_imgs = train_hr_imgs[:total_train_imgs-total_train_imgs%batch_size]
     for j, img in enumerate(train_hr_imgs):
         train_hr_imgs[j] = img[:, :, np.newaxis] #np.repeat(img[:, :, np.newaxis], 3, axis=2)
 
