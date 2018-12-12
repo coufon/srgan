@@ -47,7 +47,7 @@ def SRGAN_g(t_image, is_train=False, reuse=False):
         n = Conv2d(n, 256, (3, 3), (1, 1), act=None, padding='SAME', W_init=w_init, name='n256s1/2')
         n = SubpixelConv2d(n, scale=2, n_out_channel=None, act=tf.nn.relu, name='pixelshufflerx2/2')
 
-        n = Conv2d(n, 3, (1, 1), (1, 1), act=tf.nn.tanh, padding='SAME', W_init=w_init, name='out')
+        n = Conv2d(n, 1, (1, 1), (1, 1), act=tf.nn.tanh, padding='SAME', W_init=w_init, name='out')
         return n
 
 
@@ -98,7 +98,7 @@ def SRGAN_g2(t_image, is_train=False, reuse=False):
         n = Conv2d(n, 32, (3, 3), (1, 1), padding='SAME', W_init=w_init, b_init=b_init, name='up2/conv2d')  # <-- may need to increase n_filter
         n = BatchNormLayer(n, act=tf.nn.relu, is_train=is_train, gamma_init=g_init, name='up2/batch_norm')
 
-        n = Conv2d(n, 3, (1, 1), (1, 1), act=tf.nn.tanh, padding='SAME', W_init=w_init, name='out')
+        n = Conv2d(n, 1, (1, 1), (1, 1), act=tf.nn.tanh, padding='SAME', W_init=w_init, name='out')
         return n
 
 
@@ -189,7 +189,7 @@ def SRGAN_d(input_images, is_train=True, reuse=False):
     return net_ho, logits
 
 
-def Vgg19_simple_api(rgb, reuse):
+def Vgg19_simple_api(gray, reuse):
     """
     Build the VGG 19 Model
 
