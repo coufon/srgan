@@ -107,7 +107,7 @@ def train():
             d_loss = d_loss1 + d_loss2
 
             g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
-            mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image, is_mean=True)
+            mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image_s[gpu_ind], is_mean=True)
             #vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
 
             g_loss = mse_loss + g_gan_loss # mse_loss + vgg_loss + g_gan_loss
