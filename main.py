@@ -6,6 +6,7 @@ from datetime import datetime
 import numpy as np
 from time import localtime, strftime
 import logging, scipy
+from random import shuffle
 
 import tensorflow as tf
 import tensorlayer as tl
@@ -14,6 +15,7 @@ from utils import *
 from config import config, log_config
 
 ###====================== HYPER-PARAMETERS ===========================###
+num_gpus = 4
 ## Adam
 batch_size = config.TRAIN.batch_size
 lr_init = config.TRAIN.lr_init
@@ -65,46 +67,70 @@ def train():
     ## train inference
     t_image = tf.placeholder('float32', [batch_size, 96, 96, 1], name='t_image_input_to_SRGAN_generator')
     t_target_image = tf.placeholder('float32', [batch_size, 384, 384, 1], name='t_target_image')
+    
+    t_image_s = tf.split(value=t_image, num_or_size_splits=num_gpus, axis=0)
+    t_target_image_s = tf.split(value=t_target_image, num_or_size_splits=num_gpus, axis=0)
 
-    net_g = SRGAN_g(t_image, is_train=True, reuse=False)
-    net_d, logits_real = SRGAN_d(t_target_image, is_train=True, reuse=False)
-    _, logits_fake = SRGAN_d(net_g.outputs, is_train=True, reuse=True)
+    d_loss_s = list()
+    mse_loss_s = list()
+    g_gan_loss_s = list()
+    g_loss_s = list()
 
-    net_g.print_params(False)
-    net_g.print_layers()
-    net_d.print_params(False)
-    net_d.print_layers()
 
-    ## vgg inference. 0, 1, 2, 3 BILINEAR NEAREST BICUBIC AREA
-    """
-    t_target_image_224 = tf.image.resize_images(
-        t_target_image, size=[224, 224], method=0,
-        align_corners=False)  # resize_target_image_for_vgg # http://tensorlayer.readthedocs.io/en/latest/_modules/tensorlayer/layers.html#UpSampling2dLayer
-    t_predict_image_224 = tf.image.resize_images(net_g.outputs, size=[224, 224], method=0, align_corners=False)  # resize_generate_image_for_vgg
+    for gpu_ind in range(0, num_gpus):
+        with tf.device("/gpu:{}".format(gpu_ind)), tf.variable_scope(
+            name_or_scope=tf.get_variable_scope(), reuse= (gpu_ind > 0)):
 
-    net_vgg, vgg_target_emb = Vgg19_simple_api((t_target_image_224 + 1) / 2, reuse=False)
-    _, vgg_predict_emb = Vgg19_simple_api((t_predict_image_224 + 1) / 2, reuse=True)
-    """
+            # net_g and net_d are overwritten.
+            net_g = SRGAN_g(t_image_s[gpu_ind], is_train=True, reuse=False)
+            net_d, logits_real = SRGAN_d(t_target_image_s[gpu_ind], is_train=True, reuse=False)
+            _, logits_fake = SRGAN_d(net_g.outputs, is_train=True, reuse=True)
 
-    ## test inference
-    net_g_test = SRGAN_g(t_image, is_train=False, reuse=True)
+            ## vgg inference. 0, 1, 2, 3 BILINEAR NEAREST BICUBIC AREA
+            """
+            t_target_image_224 = tf.image.resize_images(
+                t_target_image, size=[224, 224], method=0,
+                align_corners=False)  # resize_target_image_for_vgg # http://tensorlayer.readthedocs.io/en/latest/_modules/tensorlayer/layers.html#UpSampling2dLayer
+            t_predict_image_224 = tf.image.resize_images(net_g.outputs, size=[224, 224], method=0, align_corners=False)  # resize_generate_image_for_vgg
 
-    # ###========================== DEFINE TRAIN OPS ==========================###
-    d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
-    d_loss2 = tl.cost.sigmoid_cross_entropy(logits_fake, tf.zeros_like(logits_fake), name='d2')
-    d_loss = d_loss1 + d_loss2
+            net_vgg, vgg_target_emb = Vgg19_simple_api((t_target_image_224 + 1) / 2, reuse=False)
+            _, vgg_predict_emb = Vgg19_simple_api((t_predict_image_224 + 1) / 2, reuse=True)
+            """
 
-    g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
-    mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image, is_mean=True)
-    #vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
+            ## test inference
+            if gpu_ind == 0:
+                net_g_test = SRGAN_g(t_image_s[gpu_ind], is_train=False, reuse=True)
 
-    g_loss = mse_loss + g_gan_loss # mse_loss + vgg_loss + g_gan_loss
+            # ###========================== DEFINE TRAIN OPS ==========================###
+            d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
+            d_loss2 = tl.cost.sigmoid_cross_entropy(logits_fake, tf.zeros_like(logits_fake), name='d2')
+            d_loss = d_loss1 + d_loss2
 
+            g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
+            mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image, is_mean=True)
+            #vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
+
+            g_loss = mse_loss + g_gan_loss # mse_loss + vgg_loss + g_gan_loss
+
+            d_loss_s.append(d_loss)
+            mse_loss_s.append(mse_loss)
+            g_gan_loss_s.append(g_gan_loss)
+            g_loss_s.append(g_loss)
+
+
+    # Take average over all GPUs.
+    d_loss = tf.reduce_mean(d_loss_s)
+    mse_loss = tf.reduce_mean(mse_loss_s)
+    g_gan_loss = tf.reduce_mean(g_gan_loss_s)
+    g_loss = tf.reduce_mean(g_loss_s)
+
+    # Optimzater.
     g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
     d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
 
     with tf.variable_scope('learning_rate'):
         lr_v = tf.Variable(lr_init, trainable=False)
+
     ## Pretrain
     g_optim_init = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(mse_loss, var_list=g_vars)
     ## SRGAN
@@ -114,8 +140,8 @@ def train():
     ###========================== RESTORE MODEL =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     tl.layers.initialize_global_variables(sess)
-    #if tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), network=net_g) is False:
-    #    tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), network=net_g)
+    tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), network=net_g)
+    #tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), network=net_g)
     #tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), network=net_d)
 
     ###============================= LOAD VGG ===============================###
@@ -142,9 +168,7 @@ def train():
     sample_imgs = train_hr_imgs[0:batch_size]
     # sample_imgs = tl.vis.read_images(train_hr_img_list[0:batch_size], path=config.TRAIN.hr_img_path, n_threads=32) # if no pre-load train set
     sample_imgs_384 = tl.prepro.threading_data(sample_imgs, fn=crop_sub_imgs_fn, is_random=False)
-    print('sample HR sub-image:', sample_imgs_384.shape, sample_imgs_384.min(), sample_imgs_384.max())
     sample_imgs_96 = tl.prepro.threading_data(sample_imgs_384, fn=downsample_fn)
-    print('sample LR sub-image:', sample_imgs_96.shape, sample_imgs_96.min(), sample_imgs_96.max())
     tl.vis.save_images(sample_imgs_96, [ni, ni], save_dir_ginit + '/_train_sample_96.png')
     tl.vis.save_images(sample_imgs_384, [ni, ni], save_dir_ginit + '/_train_sample_384.png')
     tl.vis.save_images(sample_imgs_96, [ni, ni], save_dir_gan + '/_train_sample_96.png')
@@ -158,6 +182,8 @@ def train():
         epoch_time = time.time()
         total_mse_loss, n_iter = 0, 0
 
+        shuffle(train_hr_imgs)
+
         ## If your machine have enough memory, please pre-load the whole train set.
         for idx in range(0, len(train_hr_imgs), batch_size):
             step_time = time.time()
@@ -168,11 +194,11 @@ def train():
             print("Epoch [%2d/%2d] %4d time: %4.4fs, mse: %.8f " % (epoch, n_epoch_init, n_iter, time.time() - step_time, errM))
             total_mse_loss += errM
             n_iter += 1
-        log = "[*] Epoch: [%2d/%2d] time: %4.4fs, mse: %.8f" % (epoch, n_epoch_init, time.time() - epoch_time, total_mse_loss / n_iter)
-        print(log)
+        print("[*] Epoch: [%2d/%2d] time: %4.4fs, mse: %.8f" % (
+            epoch, n_epoch_init, time.time() - epoch_time, total_mse_loss / n_iter))
 
         ## quick evaluation on train set
-        if (epoch != 0) and (epoch % 10 == 0):
+        if (epoch != 0) and (epoch % 50 == 0):
             out = sess.run(net_g_test.outputs, {t_image: sample_imgs_96})  #; print('gen sub-image:', out.shape, out.min(), out.max())
             print("[*] save images")
             tl.vis.save_images(out, [ni, ni], save_dir_ginit + '/train_%d.png' % epoch)
@@ -195,6 +221,7 @@ def train():
 
         epoch_time = time.time()
         total_d_loss, total_g_loss, n_iter = 0, 0, 0
+        shuffle(train_hr_imgs)
 
         ## If your machine have enough memory, please pre-load the whole train set.
         for idx in range(0, len(train_hr_imgs), batch_size):
@@ -211,12 +238,11 @@ def train():
             total_g_loss += errG
             n_iter += 1
 
-        log = "[*] Epoch: [%2d/%2d] time: %4.4fs, d_loss: %.8f g_loss: %.8f" % (epoch, n_epoch, time.time() - epoch_time, total_d_loss / n_iter,
-                                                                                total_g_loss / n_iter)
-        print(log)
+        print("[*] Epoch: [%2d/%2d] time: %4.4fs, d_loss: %.8f g_loss: %.8f" % (
+            epoch, n_epoch, time.time() - epoch_time, total_d_loss / n_iter, total_g_loss / n_iter))
 
         ## quick evaluation on train set
-        if (epoch != 0) and (epoch % 10 == 0):
+        if (epoch != 0) and (epoch % 50 == 0):
             out = sess.run(net_g_test.outputs, {t_image: sample_imgs_96})  #; print('gen sub-image:', out.shape, out.min(), out.max())
             print("[*] save images")
             tl.vis.save_images(out, [ni, ni], save_dir_gan + '/train_%d.png' % epoch)
