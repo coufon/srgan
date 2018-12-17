@@ -15,7 +15,7 @@ from utils import *
 from config import config, log_config
 
 ###====================== HYPER-PARAMETERS ===========================###
-num_gpus = 4
+num_gpus = 6
 ## Adam
 batch_size = config.TRAIN.batch_size
 lr_init = config.TRAIN.lr_init
@@ -27,7 +27,7 @@ n_epoch = config.TRAIN.n_epoch
 lr_decay = config.TRAIN.lr_decay
 decay_every = config.TRAIN.decay_every
 
-ni = int(np.sqrt(batch_size))
+ni = int(np.sqrt(batch_size/num_gpus))
 
 
 def train():
@@ -169,10 +169,10 @@ def train():
     # sample_imgs = tl.vis.read_images(train_hr_img_list[0:batch_size], path=config.TRAIN.hr_img_path, n_threads=32) # if no pre-load train set
     sample_imgs_384 = tl.prepro.threading_data(sample_imgs, fn=crop_sub_imgs_fn, is_random=False)
     sample_imgs_96 = tl.prepro.threading_data(sample_imgs_384, fn=downsample_fn)
-    tl.vis.save_images(sample_imgs_96, [ni, ni], save_dir_ginit + '/_train_sample_96.png')
-    tl.vis.save_images(sample_imgs_384, [ni, ni], save_dir_ginit + '/_train_sample_384.png')
-    tl.vis.save_images(sample_imgs_96, [ni, ni], save_dir_gan + '/_train_sample_96.png')
-    tl.vis.save_images(sample_imgs_384, [ni, ni], save_dir_gan + '/_train_sample_384.png')
+    tl.vis.save_images(sample_imgs_96[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/_train_sample_96.png')
+    tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/_train_sample_384.png')
+    tl.vis.save_images(sample_imgs_96[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_96.png')
+    tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_384.png')
 
     ###========================= initialize G ====================###
     ## fixed learning rate
@@ -201,7 +201,7 @@ def train():
         if (epoch != 0) and (epoch % 50 == 0):
             out = sess.run(net_g_test.outputs, {t_image: sample_imgs_96})  #; print('gen sub-image:', out.shape, out.min(), out.max())
             print("[*] save images")
-            tl.vis.save_images(out, [ni, ni], save_dir_ginit + '/train_%d.png' % epoch)
+            tl.vis.save_images(out[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/train_%d.png' % epoch)
 
         ## save model
         if (epoch != 0) and (epoch % 10 == 0):
@@ -245,7 +245,7 @@ def train():
         if (epoch != 0) and (epoch % 50 == 0):
             out = sess.run(net_g_test.outputs, {t_image: sample_imgs_96})  #; print('gen sub-image:', out.shape, out.min(), out.max())
             print("[*] save images")
-            tl.vis.save_images(out, [ni, ni], save_dir_gan + '/train_%d.png' % epoch)
+            tl.vis.save_images(out[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/train_%d.png' % epoch)
 
         ## save model
         if (epoch != 0) and (epoch % 10 == 0):
