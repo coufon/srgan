@@ -158,16 +158,6 @@ def train():
         epoch_time = time.time()
         total_mse_loss, n_iter = 0, 0
 
-        ## If your machine cannot load all images into memory, you should use
-        ## this one to load batch of images while training.
-        # random.shuffle(train_hr_img_list)
-        # for idx in range(0, len(train_hr_img_list), batch_size):
-        #     step_time = time.time()
-        #     b_imgs_list = train_hr_img_list[idx : idx + batch_size]
-        #     b_imgs = tl.prepro.threading_data(b_imgs_list, fn=get_imgs_fn, path=config.TRAIN.hr_img_path)
-        #     b_imgs_384 = tl.prepro.threading_data(b_imgs, fn=crop_sub_imgs_fn, is_random=True)
-        #     b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)
-
         ## If your machine have enough memory, please pre-load the whole train set.
         for idx in range(0, len(train_hr_imgs), batch_size):
             step_time = time.time()
@@ -197,25 +187,14 @@ def train():
         if epoch != 0 and (epoch % decay_every == 0):
             new_lr_decay = lr_decay**(epoch // decay_every)
             sess.run(tf.assign(lr_v, lr_init * new_lr_decay))
-            log = " ** new learning rate: %f (for GAN)" % (lr_init * new_lr_decay)
-            print(log)
+            print(" ** new learning rate: %f (for GAN)" % (lr_init * new_lr_decay))
         elif epoch == 0:
             sess.run(tf.assign(lr_v, lr_init))
-            log = " ** init lr: %f  decay_every_init: %d, lr_decay: %f (for GAN)" % (lr_init, decay_every, lr_decay)
-            print(log)
+            print(" ** init lr: %f  decay_every_init: %d, lr_decay: %f (for GAN)" % (
+                lr_init, decay_every, lr_decay))
 
         epoch_time = time.time()
         total_d_loss, total_g_loss, n_iter = 0, 0, 0
-
-        ## If your machine cannot load all images into memory, you should use
-        ## this one to load batch of images while training.
-        # random.shuffle(train_hr_img_list)
-        # for idx in range(0, len(train_hr_img_list), batch_size):
-        #     step_time = time.time()
-        #     b_imgs_list = train_hr_img_list[idx : idx + batch_size]
-        #     b_imgs = tl.prepro.threading_data(b_imgs_list, fn=get_imgs_fn, path=config.TRAIN.hr_img_path)
-        #     b_imgs_384 = tl.prepro.threading_data(b_imgs, fn=crop_sub_imgs_fn, is_random=True)
-        #     b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)
 
         ## If your machine have enough memory, please pre-load the whole train set.
         for idx in range(0, len(train_hr_imgs), batch_size):
