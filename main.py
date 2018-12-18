@@ -46,8 +46,11 @@ def average_gradients(tower_grads):
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
         grads = [g for g, _ in grad_and_vars]
         # Average over the 'tower' dimension.
-        grad = tf.stack(grads, 0)
-        grad = tf.reduce_mean(grad, 0)
+        if grads[0] is None:
+            grad = None
+        else:
+            grad = tf.stack(grads, 0)
+            grad = tf.reduce_mean(grad, 0)
 
         # Keep in mind that the Variables are redundant because they are shared
         # across towers. So .. we will just return the first tower's pointer to
@@ -141,8 +144,8 @@ def train():
                 model_gpus.append((t_image, t_target_image, d_loss, mse_loss, g_gan_loss, g_loss,
                     d_grad, mse_grad, g_grad))
 
-        g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
-        d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
+        #g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
+        #d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
 
         with tf.device('/cpu:0'):
             t_image_s, t_target_image_s, d_loss_s, mse_loss_s, g_gan_loss_s, g_loss_s, \
