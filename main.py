@@ -76,67 +76,66 @@ def train():
     g_gan_loss_s = list()
     g_loss_s = list()
 
+    with tf.variable_scope(tf.get_variable_scope()):
+        for gpu_ind in range(0, num_gpus):
+            reuse = (gpu_ind > 0)
 
-    for gpu_ind in range(0, num_gpus):
-        reuse = (gpu_ind > 0)
-        with tf.device("/gpu:{}".format(gpu_ind)), tf.variable_scope(
-            name_or_scope=tf.get_variable_scope(), reuse=reuse):
+            with tf.device("/gpu:{}".format(gpu_ind)):
+                # net_g and net_d are overwritten.
+                net_g = SRGAN_g(t_image_s[gpu_ind], is_train=True, reuse=reuse)
+                net_d, logits_real = SRGAN_d(t_target_image_s[gpu_ind], is_train=True, reuse=reuse)
+                _, logits_fake = SRGAN_d(net_g.outputs, is_train=True, reuse=True)
 
-            # net_g and net_d are overwritten.
-            net_g = SRGAN_g(t_image_s[gpu_ind], is_train=True, reuse=reuse)
-            net_d, logits_real = SRGAN_d(t_target_image_s[gpu_ind], is_train=True, reuse=reuse)
-            _, logits_fake = SRGAN_d(net_g.outputs, is_train=True, reuse=True)
+                ## vgg inference. 0, 1, 2, 3 BILINEAR NEAREST BICUBIC AREA
+                """
+                t_target_image_224 = tf.image.resize_images(
+                    t_target_image, size=[224, 224], method=0,
+                    align_corners=False)  # resize_target_image_for_vgg # http://tensorlayer.readthedocs.io/en/latest/_modules/tensorlayer/layers.html#UpSampling2dLayer
+                t_predict_image_224 = tf.image.resize_images(net_g.outputs, size=[224, 224], method=0, align_corners=False)  # resize_generate_image_for_vgg
 
-            ## vgg inference. 0, 1, 2, 3 BILINEAR NEAREST BICUBIC AREA
-            """
-            t_target_image_224 = tf.image.resize_images(
-                t_target_image, size=[224, 224], method=0,
-                align_corners=False)  # resize_target_image_for_vgg # http://tensorlayer.readthedocs.io/en/latest/_modules/tensorlayer/layers.html#UpSampling2dLayer
-            t_predict_image_224 = tf.image.resize_images(net_g.outputs, size=[224, 224], method=0, align_corners=False)  # resize_generate_image_for_vgg
+                net_vgg, vgg_target_emb = Vgg19_simple_api((t_target_image_224 + 1) / 2, reuse=False)
+                _, vgg_predict_emb = Vgg19_simple_api((t_predict_image_224 + 1) / 2, reuse=True)
+                """
 
-            net_vgg, vgg_target_emb = Vgg19_simple_api((t_target_image_224 + 1) / 2, reuse=False)
-            _, vgg_predict_emb = Vgg19_simple_api((t_predict_image_224 + 1) / 2, reuse=True)
-            """
+                ## test inference
+                if gpu_ind == 0:
+                    net_g_test = SRGAN_g(t_image_s[gpu_ind], is_train=False, reuse=True)
 
-            ## test inference
-            if gpu_ind == 0:
-                net_g_test = SRGAN_g(t_image_s[gpu_ind], is_train=False, reuse=True)
+                # ###========================== DEFINE TRAIN OPS ==========================###
+                d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
+                d_loss2 = tl.cost.sigmoid_cross_entropy(logits_fake, tf.zeros_like(logits_fake), name='d2')
+                d_loss = d_loss1 + d_loss2
 
-            # ###========================== DEFINE TRAIN OPS ==========================###
-            d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
-            d_loss2 = tl.cost.sigmoid_cross_entropy(logits_fake, tf.zeros_like(logits_fake), name='d2')
-            d_loss = d_loss1 + d_loss2
+                g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
+                mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image_s[gpu_ind], is_mean=True)
+                #vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
 
-            g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
-            mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image_s[gpu_ind], is_mean=True)
-            #vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
+                g_loss = mse_loss + g_gan_loss # mse_loss + vgg_loss + g_gan_loss
 
-            g_loss = mse_loss + g_gan_loss # mse_loss + vgg_loss + g_gan_loss
-
-            d_loss_s.append(d_loss)
-            mse_loss_s.append(mse_loss)
-            g_gan_loss_s.append(g_gan_loss)
-            g_loss_s.append(g_loss)
+                d_loss_s.append(d_loss)
+                mse_loss_s.append(mse_loss)
+                g_gan_loss_s.append(g_gan_loss)
+                g_loss_s.append(g_loss)
 
 
-    # Take average over all GPUs.
-    d_loss = tf.reduce_mean(d_loss_s)
-    mse_loss = tf.reduce_mean(mse_loss_s)
-    g_gan_loss = tf.reduce_mean(g_gan_loss_s)
-    g_loss = tf.reduce_mean(g_loss_s)
+        # Take average over all GPUs.
+        d_loss = tf.reduce_mean(d_loss_s)
+        mse_loss = tf.reduce_mean(mse_loss_s)
+        g_gan_loss = tf.reduce_mean(g_gan_loss_s)
+        g_loss = tf.reduce_mean(g_loss_s)
 
-    # Optimzater.
-    g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
-    d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
+        # Optimzater.
+        g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
+        d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
 
-    with tf.variable_scope('learning_rate'):
-        lr_v = tf.Variable(lr_init, trainable=False)
+        with tf.variable_scope('learning_rate'):
+            lr_v = tf.Variable(lr_init, trainable=False)
 
-    ## Pretrain
-    g_optim_init = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(mse_loss, var_list=g_vars)
-    ## SRGAN
-    g_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(g_loss, var_list=g_vars)
-    d_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(d_loss, var_list=d_vars)
+        ## Pretrain
+        g_optim_init = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(mse_loss, var_list=g_vars)
+        ## SRGAN
+        g_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(g_loss, var_list=g_vars)
+        d_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(d_loss, var_list=d_vars)
 
     ###========================== RESTORE MODEL =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
