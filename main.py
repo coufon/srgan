@@ -341,7 +341,7 @@ def evaluate():
 
     ###======================= EVALUATION =============================###
     start_time = time.time()
-    out = sess.run(net_g.outputs, {t_image: [np.expand_dims(valid_lr_img, 3)]})
+    out = sess.run(net_g.outputs, {t_image: [np.expand_dims(valid_lr_img, 2)]})
     print("took: %4.4fs" % (time.time() - start_time))
 
     print("LR size: %s /  generated HR size: %s" % (size, out.shape))  # LR size: (339, 510, 1) /  gen HR size: (1, 1356, 2040, 1)
