@@ -104,11 +104,9 @@ def train():
                 g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
                 mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image, is_mean=True)
                 #vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
-
                 g_loss = mse_loss + g_gan_loss # mse_loss + vgg_loss + g_gan_loss
 
-                tf.get_variable_scope().reuse_variables()
-
+                #tf.get_variable_scope().reuse_variables()
                 model_gpus.append((t_image, t_target_image, d_loss, mse_loss, g_gan_loss, g_loss))
 
         with tf.device('/cpu:0'):
@@ -124,13 +122,13 @@ def train():
             with tf.variable_scope('learning_rate'):
                 lr_v = tf.Variable(lr_init, trainable=False)
 
-            g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
-            d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
-            ## Pretrain
-            g_optim_init = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(mse_loss, var_list=g_vars)
-            ## SRGAN
-            g_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(g_loss, var_list=g_vars)
-            d_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(d_loss, var_list=d_vars)
+    g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
+    d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
+    ## Pretrain
+    g_optim_init = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(mse_loss, var_list=g_vars)
+    ## SRGAN
+    g_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(g_loss, var_list=g_vars)
+    d_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(d_loss, var_list=d_vars)
 
     ###========================== RESTORE MODEL =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
