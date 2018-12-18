@@ -30,6 +30,15 @@ decay_every = config.TRAIN.decay_every
 ni = int(np.sqrt(batch_size/num_gpus))
 
 
+def gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384):
+    input_map = dict()
+    batch_size_per_gpu = batch_size/num_gpus
+    for i in range(num_gpus):
+        input_map[t_image_s[i]] = b_imgs_96[batch_size_per_gpu*i:batch_size_per_gpu*(i+1)]
+        input_map[t_target_image_s[i]] = b_imgs_384[batch_size_per_gpu*i:batch_size_per_gpu*(i+1)]
+    return input_map
+
+
 def train():
     ## create folders to save result images and trained model
     save_dir_ginit = "samples/{}_ginit".format(tl.global_flag['mode'])
@@ -111,8 +120,6 @@ def train():
 
         with tf.device('/cpu:0'):
             t_image_s, t_target_image_s, d_loss_s, mse_loss_s, g_gan_loss_s, g_loss_s = zip(*model_gpus)
-            t_image = tf.concat(t_image_s, axis=0)
-            t_target_image = tf.concat(t_target_image_s, axis=0)
             # Take average over all GPUs.
             d_loss = tf.reduce_mean(d_loss_s)
             mse_loss = tf.reduce_mean(mse_loss_s)
@@ -183,7 +190,8 @@ def train():
             b_imgs_384 = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=crop_sub_imgs_fn, is_random=True)
             b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)
             ## update G
-            errM, _ = sess.run([mse_loss, g_optim_init], {t_image: b_imgs_96, t_target_image: b_imgs_384})
+            errM, _ = sess.run([mse_loss, g_optim_init],
+                gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384))
             print("Epoch [%2d/%2d] %4d time: %4.4fs, mse: %.8f " % (epoch, n_epoch_init, n_iter, time.time() - step_time, errM))
             total_mse_loss += errM
             n_iter += 1
@@ -224,7 +232,8 @@ def train():
             ## update D
             errD, _ = sess.run([d_loss, d_optim], {t_image: b_imgs_96, t_target_image: b_imgs_384})
             ## update G
-            errG, errM, errA, _ = sess.run([g_loss, mse_loss, g_gan_loss, g_optim], {t_image: b_imgs_96, t_target_image: b_imgs_384})
+            errG, errM, errA, _ = sess.run([g_loss, mse_loss, g_gan_loss, g_optim],
+                gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384))
             print("Epoch [%2d/%2d] %4d time: %4.4fs, d_loss: %.8f g_loss: %.8f (mse: %.6f adv: %.6f)" %
                   (epoch, n_epoch, n_iter, time.time() - step_time, errD, errG, errM, errA))
             total_d_loss += errD
