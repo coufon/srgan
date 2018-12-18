@@ -39,6 +39,14 @@ def gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_
     return input_map
 
 
+def gen_input_feed_map_test(num_gpus, t_image_s, b_imgs_96):
+    input_map = dict()
+    batch_size_per_gpu = batch_size/num_gpus
+    for i in range(num_gpus):
+        input_map[t_image_s[i]] = b_imgs_96[batch_size_per_gpu*i:batch_size_per_gpu*(i+1)]
+    return input_map
+
+
 def average_gradients(tower_grads):
     average_grads = []
     for grad_and_vars in zip(*tower_grads):
@@ -225,12 +233,12 @@ def train():
 
         ## quick evaluation on train set
         if (epoch != 0) and (epoch % 50 == 0):
-            out = sess.run(net_g_test.outputs, {t_image: sample_imgs_96})  #; print('gen sub-image:', out.shape, out.min(), out.max())
+            out = sess.run(net_g_test.outputs, gen_input_feed_map_test(num_gpus, t_image_s, sample_imgs_96))
             print("[*] save images")
             tl.vis.save_images(out[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/train_%d.png' % epoch)
 
         ## save model
-        if (epoch != 0) and (epoch % 10 == 0):
+        if (epoch != 0) and (epoch % 50 == 0):
             tl.files.save_npz(net_g.all_params, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), sess=sess)
 
     ###========================= train GAN (SRGAN) =========================###
@@ -270,12 +278,12 @@ def train():
 
         ## quick evaluation on train set
         if (epoch != 0) and (epoch % 50 == 0):
-            out = sess.run(net_g_test.outputs, {t_image: sample_imgs_96})  #; print('gen sub-image:', out.shape, out.min(), out.max())
+            out = sess.run(net_g_test.outputs, gen_input_feed_map_test(num_gpus, t_image_s, sample_imgs_96))
             print("[*] save images")
             tl.vis.save_images(out[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/train_%d.png' % epoch)
 
         ## save model
-        if (epoch != 0) and (epoch % 10 == 0):
+        if (epoch != 0) and (epoch % 50 == 0):
             tl.files.save_npz(net_g.all_params, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), sess=sess)
             tl.files.save_npz(net_d.all_params, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), sess=sess)
 
