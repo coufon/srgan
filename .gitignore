@@ -1,3 +1,4 @@
 *.pyc
 *.npy
+checkpoint/d_srgan.npz
 

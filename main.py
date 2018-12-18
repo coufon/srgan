@@ -78,6 +78,14 @@ def train():
     checkpoint_dir = "checkpoint"  # checkpoint_resize_conv
     tl.files.exists_or_mkdir(checkpoint_dir)
 
+    # For test.
+    config.VALID.lr_img_path = 'lrs'
+    valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
+    valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
+    valid_lr_img = valid_lr_imgs[0]
+    valid_lr_img = (valid_lr_img / 127.5) - 1  # rescale to ［－1, 1]
+
+
     ###====================== PRE-LOAD DATA ===========================###
     train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))
     #train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.png', printable=False))
@@ -132,7 +140,8 @@ def train():
 
                 ## test inference
                 if gpu_ind == 0:
-                    net_g_test = SRGAN_g(t_image, is_train=False, reuse=True)
+                    t_image_test = tf.placeholder('float32', [1, None, None, 1], name='input_image_test')
+                    net_g_test = SRGAN_g(t_image_test, is_train=False, reuse=True)
 
                 # ###========================== DEFINE TRAIN OPS ==========================###
                 d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
@@ -197,6 +206,7 @@ def train():
     """
 
     ###============================= TRAINING ===============================###
+    """
     ## use first `batch_size` of train set to have a quick test during training
     sample_imgs = train_hr_imgs[0:batch_size]
     # sample_imgs = tl.vis.read_images(train_hr_img_list[0:batch_size], path=config.TRAIN.hr_img_path, n_threads=32) # if no pre-load train set
@@ -206,6 +216,7 @@ def train():
     tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/_train_sample_384.png')
     tl.vis.save_images(sample_imgs_96[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_96.png')
     tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_384.png')
+    """
 
     ###========================= initialize G ====================###
     ## fixed learning rate
@@ -281,14 +292,15 @@ def train():
 
         ## quick evaluation on train set
         if (epoch != 0) and (epoch % 50 == 0):
-            out = sess.run(net_g_test.outputs, gen_input_feed_map_test(num_gpus, t_image_s, sample_imgs_96))
+            out = sess.run(net_g_test.outputs, {t_image_test: [np.expand_dims(valid_lr_img, 2)]})
             print("[*] save images")
-            tl.vis.save_images(out[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/train_%d.png' % epoch)
+            tl.vis.save_image(out[0], save_dir_gan + '/train_%d.png' % epoch)
 
         ## save model
         if (epoch != 0) and (epoch % 50 == 0):
             tl.files.save_npz(net_g.all_params, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), sess=sess)
             tl.files.save_npz(net_d.all_params, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), sess=sess)
+            tl.files.save_npz(net_g_test.all_params, name=checkpoint_dir + '/g_{}_test.npz'.format(tl.global_flag['mode']), sess=sess)
 
 
 def evaluate():
@@ -341,12 +353,15 @@ def evaluate():
 
     ###======================= EVALUATION =============================###
     start_time = time.time()
-    out = sess.run(net_g.outputs, {t_image: [np.expand_dims(valid_lr_img, 3)]})
+    out = sess.run(net_g.outputs, {t_image: [np.expand_dims(valid_lr_img, 2)]})
     print("took: %4.4fs" % (time.time() - start_time))
+
+    print out[0][:, :, 0]
+    print valid_hr_img
 
     print("LR size: %s /  generated HR size: %s" % (size, out.shape))  # LR size: (339, 510, 1) /  gen HR size: (1, 1356, 2040, 1)
     print("[*] save images")
-    tl.vis.save_image(out[0, :, :], save_dir + '/valid_gen.png')
+    tl.vis.save_image((out[0][:, :, 0] + 1)*127.5, save_dir + '/valid_gen.png')
     tl.vis.save_image(valid_lr_img, save_dir + '/valid_lr.png')
     tl.vis.save_image(valid_hr_img, save_dir + '/valid_hr.png')
 
