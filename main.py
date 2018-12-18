@@ -336,7 +336,7 @@ def evaluate():
 
     ###========================== RESTORE G =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    tl.layers.initialize_global_variables(sess)
+    sess.run(tf.global_variables_initializer())
     tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_srgan.npz', network=net_g)
 
     ###======================= EVALUATION =============================###
@@ -346,7 +346,7 @@ def evaluate():
 
     print("LR size: %s /  generated HR size: %s" % (size, out.shape))  # LR size: (339, 510, 1) /  gen HR size: (1, 1356, 2040, 1)
     print("[*] save images")
-    tl.vis.save_image(out[0], save_dir + '/valid_gen.png')
+    tl.vis.save_image(out[0, :, :], save_dir + '/valid_gen.png')
     tl.vis.save_image(valid_lr_img, save_dir + '/valid_lr.png')
     tl.vis.save_image(valid_hr_img, save_dir + '/valid_hr.png')
 
