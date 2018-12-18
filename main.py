@@ -211,6 +211,7 @@ def train():
     ## fixed learning rate
     sess.run(tf.assign(lr_v, lr_init))
     print(" ** fixed learning rate: %f (for init G)" % lr_init)
+    """
     for epoch in range(0, n_epoch_init + 1):
         epoch_time = time.time()
         total_mse_loss, n_iter = 0, 0
@@ -240,6 +241,7 @@ def train():
         ## save model
         if (epoch != 0) and (epoch % 50 == 0):
             tl.files.save_npz(net_g.all_params, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), sess=sess)
+    """
 
     ###========================= train GAN (SRGAN) =========================###
     for epoch in range(0, n_epoch + 1):
