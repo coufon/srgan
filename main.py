@@ -39,6 +39,25 @@ def gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_
     return input_map
 
 
+def average_gradients(tower_grads):
+    average_grads = []
+    for grad_and_vars in zip(*tower_grads):
+        # Note that each grad_and_vars looks like the following:
+        #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
+        grads = [g for g, _ in grad_and_vars]
+        # Average over the 'tower' dimension.
+        grad = tf.stack(grads, 0)
+        grad = tf.reduce_mean(grad, 0)
+
+        # Keep in mind that the Variables are redundant because they are shared
+        # across towers. So .. we will just return the first tower's pointer to
+        # the Variable.
+        v = grad_and_vars[0][1]
+        grad_and_var = (grad, v)
+        average_grads.append(grad_and_var)
+    return average_grads
+
+
 def train():
     ## create folders to save result images and trained model
     save_dir_ginit = "samples/{}_ginit".format(tl.global_flag['mode'])
@@ -62,20 +81,19 @@ def train():
     for j, img in enumerate(train_hr_imgs):
         train_hr_imgs[j] = img[:, :, np.newaxis] #np.repeat(img[:, :, np.newaxis], 3, axis=2)
 
-    # for im in train_hr_imgs:
-    #     print(im.shape)
     # valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
-    # for im in valid_lr_imgs:
-    #     print(im.shape)
     # valid_hr_imgs = tl.vis.read_images(valid_hr_img_list, path=config.VALID.hr_img_path, n_threads=32)
-    # for im in valid_hr_imgs:
-    #     print(im.shape)
-    # exit()
 
     ###========================== DEFINE MODEL ============================###
     ## train inference
     model_gpus = list()
     with tf.variable_scope(tf.get_variable_scope()):
+        with tf.device('/cpu:0'):
+            with tf.variable_scope('learning_rate'):
+                lr_v = tf.Variable(lr_init, trainable=False)
+        
+        opt = tf.train.AdamOptimizer(lr_v, beta1=beta1)
+
         for gpu_ind in range(0, num_gpus):
             reuse = (gpu_ind > 0)
 
@@ -115,32 +133,35 @@ def train():
                 #vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
                 g_loss = mse_loss + g_gan_loss # mse_loss + vgg_loss + g_gan_loss
 
+                d_grad = opt.compute_gradients(d_loss)
+                mse_grad = opt.compute_gradients(mse_loss)
+                g_grad = opt.compute_gradients(g_loss)
+
                 #tf.get_variable_scope().reuse_variables()
-                model_gpus.append((t_image, t_target_image, d_loss, mse_loss, g_gan_loss, g_loss))
+                model_gpus.append((t_image, t_target_image, d_loss, mse_loss, g_gan_loss, g_loss,
+                    d_grad, mse_grad, g_grad))
 
         g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
         d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
 
         with tf.device('/cpu:0'):
-            t_image_s, t_target_image_s, d_loss_s, mse_loss_s, g_gan_loss_s, g_loss_s = zip(*model_gpus)
+            t_image_s, t_target_image_s, d_loss_s, mse_loss_s, g_gan_loss_s, g_loss_s, \
+                d_grad_s, mse_grad_s, g_grad_s = zip(*model_gpus)
+            
             # Take average over all GPUs.
             d_loss = tf.reduce_mean(d_loss_s)
             mse_loss = tf.reduce_mean(mse_loss_s)
             g_gan_loss = tf.reduce_mean(g_gan_loss_s)
             g_loss = tf.reduce_mean(g_loss_s)
 
-            with tf.variable_scope('learning_rate'):
-                lr_v = tf.Variable(lr_init, trainable=False)
+            d_grad_op = opt.apply_gradients(average_gradients(d_grad_s))
+            mse_grad_op = opt.apply_gradients(average_gradients(mse_grad_s))
+            g_grad_op = opt.apply_gradients(average_gradients(g_grad_s))
 
-            ## Pretrain
-            g_optim_init = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(mse_loss, var_list=g_vars)
-            ## SRGAN
-            g_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(g_loss, var_list=g_vars)
-            d_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(d_loss, var_list=d_vars)
 
     ###========================== RESTORE MODEL =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    tl.layers.initialize_global_variables(sess)
+    sess.run(tf.global_variables_initializer())
     tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), network=net_g)
     #tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), network=net_g)
     #tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), network=net_d)
@@ -191,7 +212,7 @@ def train():
             b_imgs_384 = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=crop_sub_imgs_fn, is_random=True)
             b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)
             ## update G
-            errM, _ = sess.run([mse_loss, g_optim_init],
+            errM, _ = sess.run([mse_loss, mse_grad_op],
                 gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384))
             print("Epoch [%2d/%2d] %4d time: %4.4fs, mse: %.8f " % (epoch, n_epoch_init, n_iter, time.time() - step_time, errM))
             total_mse_loss += errM
@@ -231,9 +252,9 @@ def train():
             b_imgs_384 = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=crop_sub_imgs_fn, is_random=True)
             b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)
             ## update D
-            errD, _ = sess.run([d_loss, d_optim], {t_image: b_imgs_96, t_target_image: b_imgs_384})
+            errD, _ = sess.run([d_loss, d_grad_op], {t_image: b_imgs_96, t_target_image: b_imgs_384})
             ## update G
-            errG, errM, errA, _ = sess.run([g_loss, mse_loss, g_gan_loss, g_optim],
+            errG, errM, errA, _ = sess.run([g_loss, mse_loss, g_gan_loss, g_grad_op],
                 gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384))
             print("Epoch [%2d/%2d] %4d time: %4.4fs, d_loss: %.8f g_loss: %.8f (mse: %.6f adv: %.6f)" %
                   (epoch, n_epoch, n_iter, time.time() - step_time, errD, errG, errM, errA))
