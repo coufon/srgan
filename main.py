@@ -111,8 +111,8 @@ def train():
 
         with tf.device('/cpu:0'):
             t_image_s, t_target_image_s, d_loss_s, mse_loss_s, g_gan_loss_s, g_loss_s = zip(*model_gpus)
-            t_image = tf.concat(t_image_s)
-            t_target_image = tf.concat(t_target_image_s)
+            t_image = tf.concat(t_image_s, axis=0)
+            t_target_image = tf.concat(t_target_image_s, axis=0)
             # Take average over all GPUs.
             d_loss = tf.reduce_mean(d_loss_s)
             mse_loss = tf.reduce_mean(mse_loss_s)
