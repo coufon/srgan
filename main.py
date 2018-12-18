@@ -78,12 +78,13 @@ def train():
 
 
     for gpu_ind in range(0, num_gpus):
+        reuse = (gpu_ind > 0)
         with tf.device("/gpu:{}".format(gpu_ind)), tf.variable_scope(
-            name_or_scope=tf.get_variable_scope(), reuse= (gpu_ind > 0)):
+            name_or_scope=tf.get_variable_scope(), reuse=reuse):
 
             # net_g and net_d are overwritten.
-            net_g = SRGAN_g(t_image_s[gpu_ind], is_train=True, reuse=False)
-            net_d, logits_real = SRGAN_d(t_target_image_s[gpu_ind], is_train=True, reuse=False)
+            net_g = SRGAN_g(t_image_s[gpu_ind], is_train=True, reuse=reuse)
+            net_d, logits_real = SRGAN_d(t_target_image_s[gpu_ind], is_train=True, reuse=reuse)
             _, logits_fake = SRGAN_d(net_g.outputs, is_train=True, reuse=True)
 
             ## vgg inference. 0, 1, 2, 3 BILINEAR NEAREST BICUBIC AREA
