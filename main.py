@@ -265,7 +265,8 @@ def train():
             b_imgs_384 = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=crop_sub_imgs_fn, is_random=True)
             b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)
             ## update D
-            errD, _ = sess.run([d_loss, d_grad_op], {t_image: b_imgs_96, t_target_image: b_imgs_384})
+            errD, _ = sess.run([d_loss, d_grad_op],
+                gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384))
             ## update G
             errG, errM, errA, _ = sess.run([g_loss, mse_loss, g_gan_loss, g_grad_op],
                 gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384))
