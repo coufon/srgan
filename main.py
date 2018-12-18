@@ -323,12 +323,9 @@ def evaluate():
     valid_lr_img = valid_lr_imgs[imid]
     valid_hr_img = valid_hr_imgs[imid]
 
-    valid_lr_img = np.stack([valid_lr_img, valid_lr_img, valid_lr_img], axis=2)
-    valid_hr_img = np.stack([valid_hr_img, valid_hr_img, valid_hr_img], axis=2)
-
-
     # valid_lr_img = get_imgs_fn('test.png', 'data2017/')  # if you want to test your own image
     valid_lr_img = (valid_lr_img / 127.5) - 1  # rescale to ［－1, 1]
+    valid_hr_img = (valid_hr_img / 127.5) - 1
     # print(valid_lr_img.min(), valid_lr_img.max())
 
     size = valid_lr_img.shape
@@ -344,7 +341,7 @@ def evaluate():
 
     ###======================= EVALUATION =============================###
     start_time = time.time()
-    out = sess.run(net_g.outputs, {t_image: [valid_lr_img]})
+    out = sess.run(net_g.outputs, {t_image: [np.expand_dims(valid_lr_img, 3)]})
     print("took: %4.4fs" % (time.time() - start_time))
 
     print("LR size: %s /  generated HR size: %s" % (size, out.shape))  # LR size: (339, 510, 1) /  gen HR size: (1, 1356, 2040, 1)
