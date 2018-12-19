@@ -15,7 +15,7 @@ from utils import *
 from config import config, log_config
 
 ###====================== HYPER-PARAMETERS ===========================###
-num_gpus = 6
+num_gpus = 2
 ## Adam
 batch_size = config.TRAIN.batch_size
 lr_init = config.TRAIN.lr_init
@@ -70,6 +70,12 @@ def average_gradients(tower_grads):
 
 
 def train():
+    config.VALID.lr_img_path = 'lrs'
+    valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
+    valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
+    valid_lr_img = valid_lr_imgs[0]
+    #valid_lr_img = (valid_lr_img / 127.5) - 1  # rescale to ［－1, 1]
+
     ## create folders to save result images and trained model
     save_dir_ginit = "samples/{}_ginit".format(tl.global_flag['mode'])
     save_dir_gan = "samples/{}_gan".format(tl.global_flag['mode'])
@@ -132,7 +138,9 @@ def train():
 
                 ## test inference
                 if gpu_ind == 0:
-                    net_g_test = SRGAN_g(t_image, is_train=False, reuse=True)
+                    t_image_test = tf.placeholder('float32', [1, None, None, 1],
+                    	name='t_image_input_test')
+                    net_g_test = SRGAN_g(t_image_test, is_train=False, reuse=True)
 
                 # ###========================== DEFINE TRAIN OPS ==========================###
                 d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
@@ -280,13 +288,13 @@ def train():
             epoch, n_epoch, time.time() - epoch_time, total_d_loss / n_iter, total_g_loss / n_iter))
 
         ## quick evaluation on train set
-        if (epoch != 0) and (epoch % 10 == 0):
-            out = sess.run(net_g_test.outputs, gen_input_feed_map_test(num_gpus, t_image_s, sample_imgs_96))
+        if (epoch != 0) and (epoch % 5 == 0):
+            out = sess.run(net_g_test.outputs, {t_image_test: [valid_lr_img[:, :, np.newaxis]]})
             print("[*] save images")
-            tl.vis.save_images(out[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/train_%d.png' % epoch)
+            tl.vis.save_image(out[0], save_dir_gan + '/train_%d.png' % epoch)
 
         ## save model
-        if (epoch != 0) and (epoch % 10 == 0):
+        if (epoch != 0) and (epoch % 5 == 0):
             tl.files.save_npz(net_g.all_params, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), sess=sess)
             tl.files.save_npz(net_d.all_params, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), sess=sess)
             tl.files.save_npz(net_g_test.all_params, name=checkpoint_dir + '/g_{}_test.npz'.format(tl.global_flag['mode']), sess=sess)
