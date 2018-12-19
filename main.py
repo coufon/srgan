@@ -350,7 +350,7 @@ def evaluate():
 
     ###======================= EVALUATION =============================###
     start_time = time.time()
-    out = sess.run(net_g.outputs, {t_image: [np.expand_dims(valid_lr_img, 3)]})
+    out = sess.run(net_g.outputs, {t_image: [np.expand_dims(valid_lr_img, 2)]})
     print("took: %4.4fs" % (time.time() - start_time))
 
     print out[0][:, :, 0]
