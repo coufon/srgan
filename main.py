@@ -74,7 +74,7 @@ def train():
     valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
     valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
     valid_lr_img = valid_lr_imgs[0]
-    #valid_lr_img = (valid_lr_img / 127.5) - 1  # rescale to ［－1, 1]
+    valid_lr_img = (valid_lr_img / 127.5) - 1  # rescale to ［－1, 1]
 
     ## create folders to save result images and trained model
     save_dir_ginit = "samples/{}_ginit".format(tl.global_flag['mode'])
