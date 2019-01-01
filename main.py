@@ -70,7 +70,6 @@ def average_gradients(tower_grads):
 
 
 def train():
-    config.VALID.lr_img_path = 'lrs'
     valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
     valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
     valid_lr_img = valid_lr_imgs[0]
@@ -79,6 +78,7 @@ def train():
     ## create folders to save result images and trained model
     save_dir_ginit = "samples/{}_ginit".format(tl.global_flag['mode'])
     save_dir_gan = "samples/{}_gan".format(tl.global_flag['mode'])
+
     tl.files.exists_or_mkdir(save_dir_ginit)
     tl.files.exists_or_mkdir(save_dir_gan)
     checkpoint_dir = "checkpoint"  # checkpoint_resize_conv
@@ -288,13 +288,13 @@ def train():
             epoch, n_epoch, time.time() - epoch_time, total_d_loss / n_iter, total_g_loss / n_iter))
 
         ## quick evaluation on train set
-        if (epoch != 0) and (epoch % 5 == 0):
+        if (epoch != 0) and (epoch % 100 == 0):
             out = sess.run(net_g_test.outputs, {t_image_test: [valid_lr_img[:, :, np.newaxis]]})
             print("[*] save images")
             tl.vis.save_image(out[0], save_dir_gan + '/train_%d.png' % epoch)
 
         ## save model
-        if (epoch != 0) and (epoch % 5 == 0):
+        if (epoch != 0) and (epoch % 100 == 0):
             tl.files.save_npz(net_g.all_params, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), sess=sess)
             tl.files.save_npz(net_d.all_params, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), sess=sess)
             tl.files.save_npz(net_g_test.all_params, name=checkpoint_dir + '/g_{}_test.npz'.format(tl.global_flag['mode']), sess=sess)
