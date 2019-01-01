@@ -27,7 +27,7 @@ n_epoch = config.TRAIN.n_epoch
 lr_decay = config.TRAIN.lr_decay
 decay_every = config.TRAIN.decay_every
 
-ni = int(np.sqrt(batch_size/num_gpus))
+#ni = int(np.sqrt(batch_size/num_gpus))
 
 
 def gen_input_feed_map(num_gpus, t_image_s, t_target_image_s, b_imgs_96, b_imgs_384):
@@ -206,14 +206,14 @@ def train():
 
     ###============================= TRAINING ===============================###
     ## use first `batch_size` of train set to have a quick test during training
-    sample_imgs = train_hr_imgs[0:batch_size]
-    # sample_imgs = tl.vis.read_images(train_hr_img_list[0:batch_size], path=config.TRAIN.hr_img_path, n_threads=32) # if no pre-load train set
-    sample_imgs_384 = tl.prepro.threading_data(sample_imgs, fn=crop_sub_imgs_fn, is_random=False)
-    sample_imgs_96 = tl.prepro.threading_data(sample_imgs_384, fn=downsample_fn)
-    tl.vis.save_images(sample_imgs_96[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/_train_sample_96.png')
-    tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/_train_sample_384.png')
-    tl.vis.save_images(sample_imgs_96[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_96.png')
-    tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_384.png')
+    #sample_imgs = train_hr_imgs[0:batch_size]
+    #sample_imgs = tl.vis.read_images(train_hr_img_list[0:batch_size], path=config.TRAIN.hr_img_path, n_threads=32) # if no pre-load train set
+    #sample_imgs_384 = tl.prepro.threading_data(sample_imgs, fn=crop_sub_imgs_fn, is_random=False)
+    #sample_imgs_96 = tl.prepro.threading_data(sample_imgs_384, fn=downsample_fn)
+    #tl.vis.save_images(sample_imgs_96[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/_train_sample_96.png')
+    #tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_ginit + '/_train_sample_384.png')
+    #tl.vis.save_images(sample_imgs_96[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_96.png')
+    #tl.vis.save_images(sample_imgs_384[0:batch_size/num_gpus], [ni, ni], save_dir_gan + '/_train_sample_384.png')
 
     ###========================= initialize G ====================###
     ## fixed learning rate
